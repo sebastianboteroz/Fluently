@@ -25,7 +25,7 @@ except Exception:
     HAS_OPENAI = False
 
 try:
-    import paho.mqtt.client as paho
+    import paho.mqtt.publish as publish
     HAS_MQTT = True
 except Exception:
     HAS_MQTT = False
@@ -78,7 +78,7 @@ def inject_custom_styles():
             letter-spacing: 0.5px;
         }
 
-        /* Campos de texto estilo tarjeta */
+        /* Adaptación de campos de texto */
         div[data-baseweb="input"], 
         div[data-baseweb="textarea"], 
         [data-testid="stTextInput"] input,
@@ -162,27 +162,25 @@ def inject_custom_styles():
 inject_custom_styles()
 
 # ==========================================
-# 4. CONFIGURACIÓN MQTT (PAHO 1.6.1)
+# 4. CONFIGURACIÓN MQTT SINCRÓNICA (Garantiza entrega de trama)
 # ==========================================
 broker = "broker.mqttdashboard.com"
 port = 1883
 mqtt_topic = "voicesebas"
 
-def on_publish(client, userdata, result):
-    print("El dato ha sido publicado correctamente vía MQTT.\n")
-
 def publish_to_wokwi(command_text, status_code="GREEN"):
     if HAS_MQTT:
         try:
-            client1 = paho.Client("ClienteSebas")
-            client1.on_publish = on_publish
-            client1.connect(broker, port)
             message = json.dumps({
                 "Act1": command_text,
                 "status": status_code
             })
-            client1.publish(mqtt_topic, message)
-            client1.disconnect()
+            publish.single(
+                topic=mqtt_topic,
+                payload=message,
+                hostname=broker,
+                port=port
+            )
             return True
         except Exception as e:
             st.error(f"Error al enviar mensaje por MQTT: {e}")
