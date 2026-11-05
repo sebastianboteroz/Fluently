@@ -7,7 +7,7 @@ import streamlit as st
 from PIL import Image
 
 # ==========================================
-# 1. IMPORTACIONES TÉCNICAS (RAG + VOZ + MQTT)
+# 1. IMPORTACIONES DE LIBRERÍAS (CON FALLBACKS)
 # ==========================================
 try:
     from PyPDF2 import PdfReader
@@ -19,28 +19,31 @@ except Exception:
     HAS_RAG = False
 
 try:
-    import paho.mqtt.client as paho
-    from bokeh.models.widgets import Button
-    from bokeh.models import CustomJS
-    from streamlit_bokeh_events import streamlit_bokeh_events
-    HAS_VOICE = True
+    from openai import OpenAI
+    HAS_OPENAI = True
 except Exception:
-    HAS_VOICE = False
+    HAS_OPENAI = False
+
+try:
+    import paho.mqtt.client as paho
+    HAS_MQTT = True
+except Exception:
+    HAS_MQTT = False
 
 # ==========================================
-# 2. CONFIGURACIÓN DE PÁGINA MÓVIL
+# 2. CONFIGURACIÓN DE PÁGINA (ESTILO MOBILE APP)
 # ==========================================
 st.set_page_config(
     page_title="Fluenty App",
     page_icon="🎙️",
-    layout="centered",  # Centrado para simular la proporción de teléfono/tablet
+    layout="centered",
     initial_sidebar_state="collapsed"
 )
 
 # ==========================================
-# 3. CSS APP SHELL & LÍNEA GRÁFICA (UX/UI)
+# 3. CSS Y LÍNEA GRÁFICA (SUNBORN + INTER + COLORES PASTEL)
 # ==========================================
-def inject_mobile_app_css():
+def inject_custom_styles():
     st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -64,32 +67,28 @@ def inject_mobile_app_css():
             --border-color: #EAEAEA;
         }
 
-        /* Fondo de pantalla general */
         .stApp {
             background-color: var(--bg-app) !important;
         }
 
-        /* Reducir márgenes externos para efecto App Shell */
         .block-container {
             padding-top: 1rem !important;
             padding-bottom: 2rem !important;
-            max-width: 550px !important; /* Ancho máximo estándar de tablet/móvil */
+            max-width: 580px !important;
         }
 
-        /* Tipografía general */
         html, body, [class*="css"], .stMarkdown, p, span, label, div {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
             color: var(--text-main) !important;
         }
 
-        /* Tipografía de Títulos */
         h1, h2, h3, .stTitle, .stHeader {
             font-family: 'Sunborn', 'Inter', sans-serif !important;
             color: var(--text-main) !important;
             letter-spacing: 0.5px;
         }
 
-        /* Header de la App */
+        /* Banner Superior */
         .app-header {
             background: linear-gradient(135deg, var(--pastel-blue) 0%, var(--mint-green) 100%);
             padding: 1.4rem;
@@ -111,14 +110,14 @@ def inject_mobile_app_css():
         .app-header p {
             font-size: 0.9rem;
             margin: 4px 0 0 0;
-            opacity: 0.9;
+            opacity: 0.95;
         }
 
-        /* Tarjetas de Contenido (Cards UI) */
+        /* Tarjetas de Diseño (Cards UI) */
         .app-card {
             background-color: var(--card-white);
             border-radius: 22px;
-            padding: 18px 20px;
+            padding: 20px;
             border: 1.5px solid var(--border-color);
             box-shadow: 0 4px 14px rgba(0, 0, 0, 0.03);
             margin-bottom: 15px;
@@ -128,16 +127,15 @@ def inject_mobile_app_css():
         .card-blue { background-color: #F0F8FA; border-color: var(--pastel-blue); }
         .card-green { background-color: #F0F7F4; border-color: var(--mint-green); }
 
-        /* Indicador de Estado en Vivo */
         .status-badge {
             display: inline-flex;
             align-items: center;
             background-color: #FFFFFF;
-            padding: 4px 12px;
+            padding: 5px 12px;
             border-radius: 20px;
             font-size: 0.8rem;
             font-weight: 600;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
         }
 
         .status-dot {
@@ -149,32 +147,7 @@ def inject_mobile_app_css():
             margin-right: 6px;
         }
 
-        /* Rediseño del Botón Bokeh para que parezca botón de App */
-        div[data-testid="stBokehChart"], .bk-root, .bk {
-            background-color: transparent !important;
-            width: 100% !important;
-        }
-
-        .bk-btn, button.bk-btn-default {
-            background: linear-gradient(135deg, var(--soft-coral) 0%, var(--dusty-pink) 100%) !important;
-            color: #FFFFFF !important;
-            border: none !important;
-            font-family: 'Inter', sans-serif !important;
-            font-weight: 700 !important;
-            font-size: 1.05rem !important;
-            border-radius: 16px !important;
-            padding: 0.9rem 1.2rem !important;
-            box-shadow: 0 6px 18px rgba(250, 152, 132, 0.35) !important;
-            width: 100% !important;
-            cursor: pointer !important;
-            transition: transform 0.15s ease !important;
-        }
-
-        .bk-btn:active {
-            transform: scale(0.97) !important;
-        }
-
-        /* Botones de Streamlit Estilo App */
+        /* Botones estilo App */
         .stButton>button {
             background-color: var(--mint-green) !important;
             color: var(--text-main) !important;
@@ -186,16 +159,20 @@ def inject_mobile_app_css():
             width: 100% !important;
         }
 
-        /* Badges para evaluación de palabras */
+        .stButton>button:hover {
+            background-color: var(--mint-hover) !important;
+        }
+
+        /* Badges de Pronunciación */
         .word-correct {
             display: inline-block;
             background-color: var(--mint-green);
             color: #1A1A1A;
             padding: 6px 12px;
             border-radius: 12px;
-            margin: 3px;
+            margin: 4px;
             font-weight: 700;
-            font-size: 0.9rem;
+            font-size: 0.95rem;
         }
 
         .word-error {
@@ -204,30 +181,28 @@ def inject_mobile_app_css():
             color: #FFFFFF;
             padding: 6px 12px;
             border-radius: 12px;
-            margin: 3px;
+            margin: 4px;
             font-weight: 700;
-            font-size: 0.9rem;
+            font-size: 0.95rem;
         }
 
-        /* Ocultar barra superior por defecto de Streamlit */
         #MainMenu { visibility: hidden; }
         footer { visibility: hidden; }
         header { visibility: hidden; }
     </style>
     """, unsafe_allow_html=True)
 
-inject_mobile_app_css()
+inject_custom_styles()
 
 # ==========================================
-# 4. CONFIGURACIÓN MQTT (TOPIC: voicemajo)
+# 4. FUNCIONES MQTT (TÓPICO: voicemajo)
 # ==========================================
 BROKER_URL = "broker.mqttdashboard.com"
 BROKER_PORT = 1883
 MQTT_TOPIC = "voicemajo"
 
 def send_mqtt_payload(command_text, status_code="GREEN"):
-    """Envía la trama JSON al broker MQTT para el circuito Wokwi."""
-    if HAS_VOICE:
+    if HAS_MQTT:
         try:
             client = paho.Client("Fluenty_Mobile_Client")
             client.connect(BROKER_URL, BROKER_PORT, 60)
@@ -244,7 +219,7 @@ def send_mqtt_payload(command_text, status_code="GREEN"):
     return False
 
 # ==========================================
-# 5. SESSION STATE
+# 5. ESTADO DE SESIÓN (SESSION STATE)
 # ==========================================
 if "knowledge_base" not in st.session_state:
     st.session_state.knowledge_base = None
@@ -261,9 +236,9 @@ if "target_phrase" not in st.session_state:
     )
 
 # ==========================================
-# 6. HEADER PERMANENTE DE LA APP
+# 6. ENCABEZADO PERMANENTE
 # ==========================================
-st.markdown(f"""
+st.markdown("""
 <div class="app-header">
     <div>
         <h1>FLUENTY</h1>
@@ -275,19 +250,22 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# BARRA LATERAL (CONFIGURACIÓN TÉCNICA Y API KEY)
+# BARRA LATERAL (AJUSTES TÉCNICOS)
 with st.sidebar:
-    st.markdown("### ⚙️ Ajustes de la App")
+    st.markdown("### ⚙️ Configuración")
     api_key = st.text_input("OpenAI API Key", type="password", placeholder="sk-...")
     if api_key:
         os.environ['OPENAI_API_KEY'] = api_key
         st.success("API Key Conectada 🟢")
+    else:
+        st.warning("Ingresa tu API Key para habilitar RAG y Whisper 🟡")
+
     st.markdown("---")
     st.caption(f"Broker MQTT: `{BROKER_URL}`")
     st.caption(f"Tópico Wokwi: `{MQTT_TOPIC}`")
 
 # ==========================================
-# 7. NAVEGACIÓN PRINCIPAL (TAB BAR ESTILO MÓVIL)
+# 7. NAVEGACIÓN TIPO APP (SEGMENTED CONTROL)
 # ==========================================
 selected_tab = st.segmented_control(
     "Navegación",
@@ -302,8 +280,8 @@ selected_tab = st.segmented_control(
 if selected_tab == "📚 Lectura PDF":
     st.markdown("""
     <div class="app-card card-blue">
-        <h3>📄 Analizar Documento</h3>
-        <p style="font-size: 0.9rem; margin-bottom: 8px;">Carga un PDF académico para traducir o aclarar conceptos complejos.</p>
+        <h3 style="margin-bottom: 4px;">📄 Analizar Documento</h3>
+        <p style="font-size: 0.9rem; margin: 0;">Carga una lectura académica en PDF para resolver dudas gramaticales o traducir conceptos.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -332,7 +310,7 @@ if selected_tab == "📚 Lectura PDF":
                     st.session_state.pdf_name = uploaded_pdf.name
                     st.success("¡PDF Indexado correctamente!")
                 except Exception as e:
-                    st.error("Error al procesar el PDF.")
+                    st.error("Error al procesar el archivo PDF.")
                     with st.expander("Detalle del error"):
                         st.code(traceback.format_exc())
 
@@ -343,7 +321,7 @@ if selected_tab == "📚 Lectura PDF":
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    if prompt := st.chat_input("Haz una pregunta sobre el PDF..."):
+    if prompt := st.chat_input("Escribe tu pregunta sobre la lectura..."):
         st.session_state.chat_messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -355,19 +333,19 @@ if selected_tab == "📚 Lectura PDF":
                     context = "\n\n".join([d.page_content for d in docs])
                     llm = ChatOpenAI(temperature=0.2, model_name="gpt-4o-mini")
                     messages = [
-                        ("system", "Eres Fluenty, un tutor de inglés y asistente académico. Responde en español explicando los fragmentos del texto."),
+                        ("system", "Eres Fluenty, un tutor de inglés y asistente académico. Responde en español explicando los fragmentos del texto en inglés."),
                         ("user", f"Contexto:\n{context}\n\nPregunta: {prompt}")
                     ]
                     ans = llm.invoke(messages).content
                     st.markdown(ans)
                     st.session_state.chat_messages.append({"role": "assistant", "content": ans})
             else:
-                fallback = "Por favor carga un PDF e ingresa tu OpenAI API Key en la barra lateral."
+                fallback = "Por favor carga un PDF e ingresa tu OpenAI API Key en la barra lateral para procesar consultas."
                 st.info(fallback)
                 st.session_state.chat_messages.append({"role": "assistant", "content": fallback})
 
 # ==========================================
-# TAB 2: LABORATORIO DE PRONUNCIACIÓN (VOZ + MQTT)
+# TAB 2: PRONUNCIACIÓN (VOZ REAL + WHISPER AI + MQTT)
 # ==========================================
 else:
     st.markdown(f"""
@@ -386,52 +364,36 @@ else:
 
     st.markdown("<h3 style='margin-top: 15px;'>🎙️ Captura de Voz</h3>", unsafe_allow_html=True)
 
+    # Widget de Micrófono Nativo
+    audio_file = st.audio_input("Presiona para grabar tu voz", key="mic_recorder")
+
     captured_text = None
 
-    if HAS_VOICE:
-        # Botón Bokeh con WebSpeechAPI (Reconocimiento continuo y captura precisa)
-        stt_button = Button(label="🎤 Toca para Hablar", width=280)
-        stt_button.js_on_event("button_click", CustomJS(code="""
-            var recognition = new webkitSpeechRecognition();
-            recognition.continuous = false;
-            recognition.interimResults = false;
-            recognition.lang = 'en-US';
-            
-            recognition.onresult = function (e) {
-                var value = "";
-                for (var i = e.resultIndex; i < e.results.length; ++i) {
-                    if (e.results[i].isFinal) {
-                        value += e.results[i][0].transcript;
-                    }
-                }
-                if (value != "") {
-                    document.dispatchEvent(new CustomEvent("GET_TEXT", {detail: value}));
-                }
-            }
-            recognition.start();
-        """))
+    if audio_file:
+        st.audio(audio_file)
+        if api_key and HAS_OPENAI:
+            with st.spinner("Analizando tu pronunciación con Whisper AI..."):
+                try:
+                    client_ai = OpenAI(api_key=api_key)
+                    transcript = client_ai.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_file,
+                        language="en"
+                    )
+                    captured_text = transcript.text.strip()
+                    st.info(f"🗣️ **Lo que la IA escuchó:** *\"{captured_text}\"*")
+                except Exception as e:
+                    st.error(f"Error procesando el audio: {e}")
+        else:
+            st.warning("⚠️ Debes ingresar tu OpenAI API Key en la barra lateral para transcribir la voz.")
 
-        result = streamlit_bokeh_events(
-            stt_button,
-            events="GET_TEXT",
-            key="voice_input",
-            refresh_on_update=False,
-            override_height=70,
-            debounce_time=0
-        )
-
-        if result and "GET_TEXT" in result:
-            captured_text = result.get("GET_TEXT").strip()
-
-    manual_input = st.text_input("O ingresa tu audio simulado:", placeholder="Ej: Language shapes the way we think...")
-
+    # Opción manual alternativa
+    manual_input = st.text_input("O ingresa una prueba de voz simulada:", placeholder="Ej: Language shapes the way we think...")
     if manual_input:
         captured_text = manual_input
 
-    # EVALUACIÓN DE PRONUNCIACIÓN Y ENVÍO A WOKWI
+    # EVALUACIÓN Y FEEDBACK VISUAL + MQTT
     if captured_text:
-        st.markdown(f"**Voz Detectada:** *\"{captured_text}\"*")
-
         target_words = st.session_state.target_phrase.lower().replace(".", "").replace(",", "").split()
         spoken_words = captured_text.lower().replace(".", "").replace(",", "").split()
 
@@ -443,7 +405,7 @@ else:
             st.markdown("""
             <div class="app-card card-green">
                 <h3 style="color: #2E7D32;">¡Excelente Pronunciación! 🌟</h3>
-                <p style="margin:0;">Tu fluidez es adecuada. Se envió señal VERDE a Wokwi.</p>
+                <p style="margin:0;">Pronunciaste las palabras correctamente. Señal VERDE enviada a Wokwi.</p>
             </div>
             """, unsafe_allow_html=True)
         else:
@@ -451,7 +413,7 @@ else:
             st.markdown("""
             <div class="app-card card-pink">
                 <h3 style="color: #C7859B;">Detalles por Corregir 💡</h3>
-                <p style="margin:0;">Revisa las palabras en rojo. Se envió señal ROJA a Wokwi.</p>
+                <p style="margin:0;">Revisa las palabras marcadas en rojo para mejorar tu fluidez. Señal ROJA enviada a Wokwi.</p>
             </div>
             """, unsafe_allow_html=True)
 
