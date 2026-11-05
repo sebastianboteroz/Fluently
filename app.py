@@ -41,7 +41,7 @@ st.set_page_config(
 )
 
 # ==========================================
-# 3. CSS (LÍNEA GRÁFICA & PROTECCIÓN MODO OSCURO)
+# 3. CSS (LÍNEA GRÁFICA & MODO CLARO FORZADO)
 # ==========================================
 def inject_custom_styles():
     st.markdown("""
@@ -188,16 +188,16 @@ def inject_custom_styles():
 inject_custom_styles()
 
 # ==========================================
-# 4. FUNCIONES MQTT
+# 4. FUNCIONES MQTT (TÓPICO PERSONALIZADO: voicesebas)
 # ==========================================
 BROKER_URL = "broker.mqttdashboard.com"
 BROKER_PORT = 1883
-MQTT_TOPIC = "voicemajo"
+MQTT_TOPIC = "voicesebas"
 
 def send_mqtt_payload(command_text, status_code="GREEN"):
     if HAS_MQTT:
         try:
-            client = paho.Client("Fluenty_Mobile_Client")
+            client = paho.Client("ClienteSebas_Fluenty")
             client.connect(BROKER_URL, BROKER_PORT, 60)
             payload = json.dumps({
                 "Act1": command_text,
@@ -229,7 +229,7 @@ if "target_phrase" not in st.session_state:
     )
 
 # ==========================================
-# 6. BANNER Y CAMPO DE API KEY EN PANTALLA PRINCIPAL
+# 6. BANNER Y ENTRADA DE API KEY EN PANTALLA PRINCIPAL
 # ==========================================
 st.markdown("""
 <div class="app-header">
@@ -243,7 +243,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# SECCIÓN VISIBLE PARA INGRESAR LA API KEY EN MÓVIL
 with st.container():
     st.markdown('<div class="app-card card-blue" style="padding: 14px 18px; margin-bottom: 12px;">', unsafe_allow_html=True)
     api_key = st.text_input(
@@ -282,7 +281,6 @@ if selected_tab == "📚 Lectura PDF":
 
     uploaded_pdf = st.file_uploader("Subir archivo PDF", type=["pdf"], label_visibility="collapsed")
 
-    # Si hay PDF y API Key, procesamos inmediatamente
     if uploaded_pdf and api_key and HAS_RAG:
         if st.session_state.pdf_name != uploaded_pdf.name or st.session_state.knowledge_base is None:
             with st.spinner("Indexando lectura con IA..."):
@@ -323,7 +321,7 @@ if selected_tab == "📚 Lectura PDF":
 
         with st.chat_message("assistant", avatar="🤖"):
             if not api_key:
-                fallback = "⚠️ Por favor ingresa tu OpenAI API Key en la caja superior de la pantalla para poder responder."
+                fallback = "⚠️ Por favor ingresa tu OpenAI API Key en la caja superior para continuar."
                 st.warning(fallback)
                 st.session_state.chat_messages.append({"role": "assistant", "content": fallback})
             elif not uploaded_pdf:
@@ -383,7 +381,7 @@ else:
                 except Exception as e:
                     st.error(f"Error procesando el audio: {e}")
         else:
-            st.warning("⚠️ Ingresa tu OpenAI API Key en el campo superior para transcribir la voz.")
+            st.warning("⚠️ Ingresa tu OpenAI API Key arriba para transcribir la voz.")
 
     manual_input = st.text_input("O ingresa una prueba de voz simulada:", placeholder="Ej: Language shapes the way we think...")
     if manual_input:
