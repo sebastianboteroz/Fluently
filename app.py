@@ -78,7 +78,7 @@ def inject_custom_styles():
             letter-spacing: 0.5px;
         }
 
-        /* Adaptación de campos de texto */
+        /* Campos de texto estilo tarjeta */
         div[data-baseweb="input"], 
         div[data-baseweb="textarea"], 
         [data-testid="stTextInput"] input,
