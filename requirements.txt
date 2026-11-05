@@ -1,12 +1,12 @@
 streamlit
+paho-mqtt==1.6.1
+numpy==1.26.3
+bokeh==2.4.3
+Streamlit-bokeh-events
 PyPDF2
 langchain-text-splitters
 langchain-community
 langchain-openai
 openai
 faiss-cpu
-paho-mqtt<2.0.0
-numpy<2.0.0
-bokeh==2.4.3
-streamlit-bokeh-events
 Pillow
