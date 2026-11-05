@@ -41,7 +41,7 @@ st.set_page_config(
 )
 
 # ==========================================
-# 3. CSS (LÍNEA GRÁFICA & CONTROLES DE AUDIO)
+# 3. CSS (LÍNEA GRÁFICA & MODO CLARO FORZADO)
 # ==========================================
 def inject_custom_styles():
     st.markdown("""
@@ -78,7 +78,7 @@ def inject_custom_styles():
             letter-spacing: 0.5px;
         }
 
-        /* Adaptación clara de inputs y textareas */
+        /* Adaptación de campos de texto */
         div[data-baseweb="input"], 
         div[data-baseweb="textarea"], 
         [data-testid="stTextInput"] input,
@@ -89,7 +89,7 @@ def inject_custom_styles():
             border: 1.5px solid #E0E0E0 !important;
         }
 
-        /* Estilo para el grabador de audio nativo con control de start/stop */
+        /* Grabador de audio nativo */
         [data-testid="stAudioInput"] {
             background-color: #FFFFFF !important;
             border-radius: 18px !important;
@@ -162,7 +162,7 @@ def inject_custom_styles():
 inject_custom_styles()
 
 # ==========================================
-# 4. CONFIGURACIÓN MQTT
+# 4. CONFIGURACIÓN MQTT (PAHO 1.6.1)
 # ==========================================
 broker = "broker.mqttdashboard.com"
 port = 1883
@@ -320,7 +320,7 @@ if selected_tab == "📚 Lectura PDF":
                     st.session_state.chat_messages.append({"role": "assistant", "content": ans})
 
 # ==========================================
-# TAB 2: PRONUNCIACIÓN (GRABADOR NATIVO START/STOP + WHISPER + MQTT)
+# TAB 2: PRONUNCIACIÓN (VOZ REAL + WHISPER + MQTT)
 # ==========================================
 else:
     st.markdown(f"""
@@ -340,7 +340,6 @@ else:
     st.markdown("<h3 style='margin-top: 15px;'>🎙️ Captura de Voz</h3>", unsafe_allow_html=True)
     st.write("Presiona el botón para iniciar, detener y revisar tu grabación de voz:")
 
-    # Grabador de audio con controles nativos (Iniciar / Detener / Escuchar)
     audio_file = st.audio_input("Grabar pronunciación", key="mic_recorder")
 
     captured_text = None
