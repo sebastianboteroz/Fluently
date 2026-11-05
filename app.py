@@ -41,7 +41,7 @@ st.set_page_config(
 )
 
 # ==========================================
-# 3. CSS CORREGIDO (FORZADO CLARO Y SIN DESTRUIR ÍCONOS)
+# 3. CSS (LÍNEA GRÁFICA & PROTECCIÓN MODO OSCURO)
 # ==========================================
 def inject_custom_styles():
     st.markdown("""
@@ -55,7 +55,6 @@ def inject_custom_styles():
             font-style: normal;
         }
 
-        /* 1. FORZAR FONDO CLARO INCLUSO SI EL MÓVIL TIENEN MODO OSCURO */
         .stApp, [data-testid="stAppViewContainer"], .main {
             background-color: #FDFBF7 !important;
             color: #1A1A1A !important;
@@ -67,8 +66,7 @@ def inject_custom_styles():
             max-width: 580px !important;
         }
 
-        /* 2. TIPOGRAFÍA LIMPIA (SIN SELECCIONAR ATRIBUTOS GLOBALES QUE ROMPAN ÍCONOS) */
-        p, h1, h2, h3, h4, label {
+        p, h1, h2, h3, h4, label, span {
             font-family: 'Inter', -apple-system, sans-serif !important;
             color: #1A1A1A !important;
         }
@@ -79,7 +77,6 @@ def inject_custom_styles():
             letter-spacing: 0.5px;
         }
 
-        /* 3. BLINDAR CAJAS DE TEXTO E INPUTS FRENTE AL MODO OSCURO MÓVIL */
         div[data-baseweb="input"], 
         div[data-baseweb="textarea"], 
         [data-testid="stTextInput"] input,
@@ -90,12 +87,6 @@ def inject_custom_styles():
             border: 1.5px solid #E0E0E0 !important;
         }
 
-        [data-testid="stTextInput"] input::placeholder,
-        [data-testid="stChatInput"] textarea::placeholder {
-            color: #888888 !important;
-        }
-
-        /* 4. BLINDAR PESTAÑAS (SEGMENTED CONTROL) */
         [data-testid="stSegmentedControl"] {
             background-color: #E8ECEF !important;
             border-radius: 18px !important;
@@ -116,7 +107,6 @@ def inject_custom_styles():
             box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
         }
 
-        /* 5. TARJETAS (CARDS) */
         .app-header {
             background: linear-gradient(135deg, #A5D7E8 0%, #8EC3B0 100%);
             padding: 1.4rem;
@@ -135,7 +125,7 @@ def inject_custom_styles():
         .app-card {
             background-color: #FFFFFF;
             border-radius: 22px;
-            padding: 20px;
+            padding: 18px 20px;
             border: 1.5px solid #EAEAEA;
             box-shadow: 0 4px 14px rgba(0, 0, 0, 0.03);
             margin-bottom: 15px;
@@ -163,7 +153,6 @@ def inject_custom_styles():
             margin-right: 6px;
         }
 
-        /* 6. CHAT MESSAGES FIX */
         [data-testid="stChatMessage"] {
             background-color: #FFFFFF !important;
             border-radius: 18px !important;
@@ -172,7 +161,6 @@ def inject_custom_styles():
             margin-bottom: 10px !important;
         }
 
-        /* BADGES */
         .word-correct {
             display: inline-block;
             background-color: #8EC3B0;
@@ -241,190 +229,4 @@ if "target_phrase" not in st.session_state:
     )
 
 # ==========================================
-# 6. BANNER PERMANENTE
-# ==========================================
-st.markdown("""
-<div class="app-header">
-    <div>
-        <h1>FLUENTY</h1>
-        <p>Asistente Multimodal de Idiomas</p>
-    </div>
-    <div class="status-badge">
-        <span class="status-dot"></span> Wokwi MQTT
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-with st.sidebar:
-    st.markdown("### ⚙️ Configuración")
-    api_key = st.text_input("OpenAI API Key", type="password", placeholder="sk-...")
-    if api_key:
-        os.environ['OPENAI_API_KEY'] = api_key
-        st.success("API Key Conectada 🟢")
-    else:
-        st.warning("Ingresa tu API Key para habilitar la IA 🟡")
-
-    st.markdown("---")
-    st.caption(f"Broker MQTT: `{BROKER_URL}`")
-    st.caption(f"Tópico Wokwi: `{MQTT_TOPIC}`")
-
-# ==========================================
-# 7. NAVEGACIÓN PRINCIPAL
-# ==========================================
-selected_tab = st.segmented_control(
-    "Navegación",
-    options=["📚 Lectura PDF", "🎙️ Pronunciación"],
-    default="🎙️ Pronunciación",
-    label_visibility="collapsed"
-)
-
-# ==========================================
-# TAB 1: ASISTENTE DE LECTURA (RAG + PDF)
-# ==========================================
-if selected_tab == "📚 Lectura PDF":
-    st.markdown("""
-    <div class="app-card card-blue">
-        <h3 style="margin-bottom: 4px;">📄 Analizar Documento</h3>
-        <p style="font-size: 0.9rem; margin: 0;">Carga tu lectura en PDF para traducir o resolver dudas.</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    uploaded_pdf = st.file_uploader("Subir archivo PDF", type=["pdf"], label_visibility="collapsed")
-
-    if uploaded_pdf and api_key and HAS_RAG:
-        if st.session_state.pdf_name != uploaded_pdf.name:
-            with st.spinner("Procesando lectura..."):
-                try:
-                    pdf_reader = PdfReader(uploaded_pdf)
-                    full_text = ""
-                    for page in pdf_reader.pages:
-                        extracted = page.extract_text()
-                        if extracted:
-                            full_text += extracted
-
-                    text_splitter = CharacterTextSplitter(
-                        separator="\n",
-                        chunk_size=600,
-                        chunk_overlap=50,
-                        length_function=len
-                    )
-                    chunks = text_splitter.split_text(full_text)
-                    embeddings = OpenAIEmbeddings()
-                    st.session_state.knowledge_base = FAISS.from_texts(chunks, embeddings)
-                    st.session_state.pdf_name = uploaded_pdf.name
-                    st.success("¡PDF Indexado correctamente!")
-                except Exception as e:
-                    st.error("Error al procesar el PDF.")
-
-    st.markdown("---")
-    st.subheader("💬 Chat de Consulta")
-
-    # USO DE AVATARES EMOJI PARA EVITAR EL ERROR DE TEXTO "FACE" / "SMART_TOY"
-    for msg in st.session_state.chat_messages:
-        avatar_icon = "👤" if msg["role"] == "user" else "🤖"
-        with st.chat_message(msg["role"], avatar=avatar_icon):
-            st.markdown(msg["content"])
-
-    if prompt := st.chat_input("Escribe tu pregunta sobre la lectura..."):
-        st.session_state.chat_messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user", avatar="👤"):
-            st.markdown(prompt)
-
-        with st.chat_message("assistant", avatar="🤖"):
-            if st.session_state.knowledge_base and api_key and HAS_RAG:
-                with st.spinner("Consultando al asistente..."):
-                    docs = st.session_state.knowledge_base.similarity_search(prompt, k=4)
-                    context = "\n\n".join([d.page_content for d in docs])
-                    llm = ChatOpenAI(temperature=0.2, model_name="gpt-4o-mini")
-                    messages = [
-                        ("system", "Eres Fluenty, un tutor de inglés y asistente académico. Responde en español explicando los fragmentos del texto en inglés."),
-                        ("user", f"Contexto:\n{context}\n\nPregunta: {prompt}")
-                    ]
-                    ans = llm.invoke(messages).content
-                    st.markdown(ans)
-                    st.session_state.chat_messages.append({"role": "assistant", "content": ans})
-            else:
-                fallback = "Por favor carga un PDF e ingresa tu OpenAI API Key en la barra lateral para procesar consultas."
-                st.info(fallback)
-                st.session_state.chat_messages.append({"role": "assistant", "content": fallback})
-
-# ==========================================
-# TAB 2: PRONUNCIACIÓN (VOZ REAL + WHISPER AI + MQTT)
-# ==========================================
-else:
-    st.markdown(f"""
-    <div class="app-card card-green">
-        <h3 style="margin-bottom: 6px;">📖 Lectura a Practicar</h3>
-        <p style="font-size: 1.15rem; font-weight: 600; line-height: 1.4; color: #1A1A1A; margin: 0;">
-            "{st.session_state.target_phrase}"
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    edited_phrase = st.text_input("Editar frase de práctica:", value=st.session_state.target_phrase)
-    if edited_phrase != st.session_state.target_phrase:
-        st.session_state.target_phrase = edited_phrase
-        st.rerun()
-
-    st.markdown("<h3 style='margin-top: 15px;'>🎙️ Captura de Voz</h3>", unsafe_allow_html=True)
-
-    audio_file = st.audio_input("Presiona para grabar tu voz", key="mic_recorder")
-
-    captured_text = None
-
-    if audio_file:
-        st.audio(audio_file)
-        if api_key and HAS_OPENAI:
-            with st.spinner("Analizando tu pronunciación con Whisper AI..."):
-                try:
-                    client_ai = OpenAI(api_key=api_key)
-                    transcript = client_ai.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file,
-                        language="en"
-                    )
-                    captured_text = transcript.text.strip()
-                    st.info(f"🗣️ **Lo que la IA escuchó:** *\"{captured_text}\"*")
-                except Exception as e:
-                    st.error(f"Error procesando el audio: {e}")
-        else:
-            st.warning("⚠️ Debes ingresar tu OpenAI API Key en la barra lateral para transcribir la voz.")
-
-    manual_input = st.text_input("O ingresa una prueba de voz simulada:", placeholder="Ej: Language shapes the way we think...")
-    if manual_input:
-        captured_text = manual_input
-
-    if captured_text:
-        target_words = st.session_state.target_phrase.lower().replace(".", "").replace(",", "").split()
-        spoken_words = captured_text.lower().replace(".", "").replace(",", "").split()
-
-        score = SequenceMatcher(None, target_words, spoken_words).ratio() * 100
-
-        if score >= 80:
-            send_mqtt_payload(captured_text, status_code="GREEN")
-            st.balloons()
-            st.markdown("""
-            <div class="app-card card-green">
-                <h3 style="color: #2E7D32;">¡Excelente Pronunciación! 🌟</h3>
-                <p style="margin:0;">Pronunciaste las palabras correctamente. Señal VERDE enviada a Wokwi.</p>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            send_mqtt_payload(captured_text, status_code="RED")
-            st.markdown("""
-            <div class="app-card card-pink">
-                <h3 style="color: #C7859B;">Detalles por Corregir 💡</h3>
-                <p style="margin:0;">Revisa las palabras marcadas en rojo para mejorar tu fluidez. Señal ROJA enviada a Wokwi.</p>
-            </div>
-            """, unsafe_allow_html=True)
-
-        st.write("**Desglose de Términos:**")
-        badges_html = ""
-        for word in target_words:
-            if word in spoken_words:
-                badges_html += f'<span class="word-correct">✓ {word}</span> '
-            else:
-                badges_html += f'<span class="word-error">✗ {word}</span> '
-
-        st.markdown(badges_html, unsafe_allow_html=True)
-        st.metric("Puntaje de Fluidez", f"{score:.1f}%")
+# 6. BANNER Y CAMPO DE API KEY EN PANTALLA PRINCIPAL
