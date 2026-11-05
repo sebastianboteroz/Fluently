@@ -6,13 +6,9 @@ from difflib import SequenceMatcher
 import streamlit as st
 from PIL import Image
 
-# Librerías de Voz y MQTT (Usando exactamente tu estructura funcional)
-import paho.mqtt.client as paho
-from bokeh.models.widgets import Button
-from bokeh.models import CustomJS
-from streamlit_bokeh_events import streamlit_bokeh_events
-
-# Importaciones RAG y OpenAI
+# ==========================================
+# 1. IMPORTACIONES DE LIBRERÍAS
+# ==========================================
 try:
     from PyPDF2 import PdfReader
     from langchain_text_splitters import CharacterTextSplitter
@@ -22,16 +18,31 @@ try:
 except Exception:
     HAS_RAG = False
 
+try:
+    from openai import OpenAI
+    HAS_OPENAI = True
+except Exception:
+    HAS_OPENAI = False
+
+try:
+    import paho.mqtt.client as paho
+    HAS_MQTT = True
+except Exception:
+    HAS_MQTT = False
+
 # ==========================================
-# 1. CONFIGURACIÓN DE PÁGINA Y ESTILOS (UX/UI)
+# 2. CONFIGURACIÓN DE PÁGINA
 # ==========================================
 st.set_page_config(
-    page_title="Fluenty - Control Multimodal",
+    page_title="Fluenty App",
     page_icon="🎙️",
     layout="centered",
     initial_sidebar_state="collapsed"
 )
 
+# ==========================================
+# 3. CSS (LÍNEA GRÁFICA & CONTROLES DE AUDIO)
+# ==========================================
 def inject_custom_styles():
     st.markdown("""
     <style>
@@ -44,7 +55,7 @@ def inject_custom_styles():
             font-style: normal;
         }
 
-        /* Forzar modo claro */
+        /* Forzar fondo claro general */
         .stApp, [data-testid="stAppViewContainer"], .main {
             background-color: #FDFBF7 !important;
             color: #1A1A1A !important;
@@ -67,6 +78,7 @@ def inject_custom_styles():
             letter-spacing: 0.5px;
         }
 
+        /* Adaptación clara de inputs y textareas */
         div[data-baseweb="input"], 
         div[data-baseweb="textarea"], 
         [data-testid="stTextInput"] input,
@@ -77,24 +89,13 @@ def inject_custom_styles():
             border: 1.5px solid #E0E0E0 !important;
         }
 
-        /* Estilos del botón Bokeh de escucha por voz */
-        div[data-testid="stBokehChart"], .bk-root, .bk {
-            background-color: transparent !important;
-            width: 100% !important;
-        }
-
-        .bk-btn, button.bk-btn-default {
-            background: linear-gradient(135deg, #FA9884 0%, #C7859B 100%) !important;
-            color: #FFFFFF !important;
-            border: none !important;
-            font-family: 'Inter', sans-serif !important;
-            font-weight: 700 !important;
-            font-size: 1.05rem !important;
-            border-radius: 16px !important;
-            padding: 0.8rem 1.2rem !important;
-            box-shadow: 0 4px 14px rgba(250, 152, 132, 0.4) !important;
-            width: 100% !important;
-            cursor: pointer !important;
+        /* Estilo para el grabador de audio nativo con control de start/stop */
+        [data-testid="stAudioInput"] {
+            background-color: #FFFFFF !important;
+            border-radius: 18px !important;
+            border: 1.5px solid #EAEAEA !important;
+            padding: 12px !important;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.03) !important;
         }
 
         [data-testid="stSegmentedControl"] {
@@ -161,7 +162,7 @@ def inject_custom_styles():
 inject_custom_styles()
 
 # ==========================================
-# 2. CONFIGURACIÓN MQTT (ESTRUCTURA IDÉNTICA A TU CÓDIGO)
+# 4. CONFIGURACIÓN MQTT
 # ==========================================
 broker = "broker.mqttdashboard.com"
 port = 1883
@@ -171,22 +172,25 @@ def on_publish(client, userdata, result):
     print("El dato ha sido publicado correctamente vía MQTT.\n")
 
 def publish_to_wokwi(command_text, status_code="GREEN"):
-    try:
-        client1 = paho.Client("ClienteSebas")
-        client1.on_publish = on_publish
-        client1.connect(broker, port)
-        message = json.dumps({
-            "Act1": command_text,
-            "status": status_code
-        })
-        client1.publish(mqtt_topic, message)
-        return True
-    except Exception as e:
-        st.error(f"Error al enviar mensaje por MQTT: {e}")
-        return False
+    if HAS_MQTT:
+        try:
+            client1 = paho.Client("ClienteSebas")
+            client1.on_publish = on_publish
+            client1.connect(broker, port)
+            message = json.dumps({
+                "Act1": command_text,
+                "status": status_code
+            })
+            client1.publish(mqtt_topic, message)
+            client1.disconnect()
+            return True
+        except Exception as e:
+            st.error(f"Error al enviar mensaje por MQTT: {e}")
+            return False
+    return False
 
 # ==========================================
-# 3. GESTIÓN DE SESIÓN
+# 5. GESTIÓN DE SESIÓN
 # ==========================================
 if "knowledge_base" not in st.session_state:
     st.session_state.knowledge_base = None
@@ -203,7 +207,7 @@ if "target_phrase" not in st.session_state:
     )
 
 # ==========================================
-# 4. ENCABEZADO Y CLAVE DE API
+# 6. ENCABEZADO Y CLAVE DE API
 # ==========================================
 st.markdown("""
 <div class="app-header">
@@ -229,11 +233,11 @@ with st.container():
         os.environ['OPENAI_API_KEY'] = api_key
         st.success("API Key vinculada correctamente ✅")
     else:
-        st.warning("⚠️ Ingrese su API Key para el análisis de lecturas PDF.")
+        st.warning("⚠️ Ingrese su API Key para el análisis de voz y lecturas PDF.")
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==========================================
-# 5. NAVEGACIÓN
+# 7. NAVEGACIÓN
 # ==========================================
 selected_tab = st.segmented_control(
     "Navegación",
@@ -316,7 +320,7 @@ if selected_tab == "📚 Lectura PDF":
                     st.session_state.chat_messages.append({"role": "assistant", "content": ans})
 
 # ==========================================
-# TAB 2: PRONUNCIACIÓN (RECONOCIMIENTO POR VOZ + MQTT)
+# TAB 2: PRONUNCIACIÓN (GRABADOR NATIVO START/STOP + WHISPER + MQTT)
 # ==========================================
 else:
     st.markdown(f"""
@@ -334,51 +338,36 @@ else:
         st.rerun()
 
     st.markdown("<h3 style='margin-top: 15px;'>🎙️ Captura de Voz</h3>", unsafe_allow_html=True)
-    st.write("Haz clic en el botón e indica tu pronunciación:")
+    st.write("Presiona el botón para iniciar, detener y revisar tu grabación de voz:")
 
-    # Configuración de captura de voz idéntica a tu script funcional
-    stt_button = Button(label="🎤 Iniciar Escucha de Voz", width=260)
-    stt_button.js_on_event("button_click", CustomJS(code="""
-        var recognition = new webkitSpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        
-        recognition.onresult = function (e) {
-            var value = "";
-            for (var i = e.resultIndex; i < e.results.length; ++i) {
-                if (e.results[i].isFinal) {
-                    value += e.results[i][0].transcript;
-                }
-            }
-            if (value != "") {
-                document.dispatchEvent(new CustomEvent("GET_TEXT", {detail: value}));
-            }
-        }
-        recognition.start();
-    """))
-
-    result = streamlit_bokeh_events(
-        stt_button,
-        events="GET_TEXT",
-        key="listen_fluenty",
-        refresh_on_update=False,
-        override_height=75,
-        debounce_time=0
-    )
+    # Grabador de audio con controles nativos (Iniciar / Detener / Escuchar)
+    audio_file = st.audio_input("Grabar pronunciación", key="mic_recorder")
 
     captured_text = None
 
-    if result and "GET_TEXT" in result:
-        captured_text = result.get("GET_TEXT").strip()
+    if audio_file:
+        if api_key and HAS_OPENAI:
+            with st.spinner("Analizando pronunciación con Whisper AI..."):
+                try:
+                    client_ai = OpenAI(api_key=api_key)
+                    transcript = client_ai.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_file,
+                        language="en"
+                    )
+                    captured_text = transcript.text.strip()
+                    st.info(f"🗣️ **Lo que la IA escuchó:** *\"{captured_text}\"*")
+                except Exception as e:
+                    st.error(f"Error procesando el audio: {e}")
+        else:
+            st.warning("⚠️ Ingrese su OpenAI API Key en la casilla superior para analizar el audio con Whisper.")
 
-    manual_input = st.text_input("O ingresa una prueba de voz manual:", placeholder="Ej: Language shapes the way we think...")
+    manual_input = st.text_input("O ingresa una prueba de voz simulada:", placeholder="Ej: Language shapes the way we think...")
     if manual_input:
         captured_text = manual_input
 
     # EVALUACIÓN Y PUBLICACIÓN EN WOKWI
     if captured_text:
-        st.markdown(f"**Comando / Voz Detectada:** *\"{captured_text}\"*")
-
         target_words = st.session_state.target_phrase.lower().replace(".", "").replace(",", "").split()
         spoken_words = captured_text.lower().replace(".", "").replace(",", "").split()
 
