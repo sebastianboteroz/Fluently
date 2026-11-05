@@ -230,3 +230,196 @@ if "target_phrase" not in st.session_state:
 
 # ==========================================
 # 6. BANNER Y CAMPO DE API KEY EN PANTALLA PRINCIPAL
+# ==========================================
+st.markdown("""
+<div class="app-header">
+    <div>
+        <h1>FLUENTY</h1>
+        <p>Asistente Multimodal de Idiomas</p>
+    </div>
+    <div class="status-badge">
+        <span class="status-dot"></span> Wokwi MQTT
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# SECCIÓN VISIBLE PARA INGRESAR LA API KEY EN MÓVIL
+with st.container():
+    st.markdown('<div class="app-card card-blue" style="padding: 14px 18px; margin-bottom: 12px;">', unsafe_allow_html=True)
+    api_key = st.text_input(
+        "🔑 Ingrese su OpenAI API Key para activar la IA:", 
+        type="password", 
+        placeholder="sk-...", 
+        key="main_api_key_input"
+    )
+    if api_key:
+        os.environ['OPENAI_API_KEY'] = api_key
+        st.success("API Key conectada 🟢", icon="✅")
+    else:
+        st.warning("⚠️ Ingrese su API Key para procesar lecturas PDF y análisis de voz.")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ==========================================
+# 7. NAVEGACIÓN PRINCIPAL
+# ==========================================
+selected_tab = st.segmented_control(
+    "Navegación",
+    options=["📚 Lectura PDF", "🎙️ Pronunciación"],
+    default="🎙️ Pronunciación",
+    label_visibility="collapsed"
+)
+
+# ==========================================
+# TAB 1: ASISTENTE DE LECTURA (RAG + PDF)
+# ==========================================
+if selected_tab == "📚 Lectura PDF":
+    st.markdown("""
+    <div class="app-card card-blue">
+        <h3 style="margin-bottom: 4px;">📄 Analizar Documento</h3>
+        <p style="font-size: 0.9rem; margin: 0;">Carga tu lectura en PDF para traducir o resolver dudas.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    uploaded_pdf = st.file_uploader("Subir archivo PDF", type=["pdf"], label_visibility="collapsed")
+
+    # Si hay PDF y API Key, procesamos inmediatamente
+    if uploaded_pdf and api_key and HAS_RAG:
+        if st.session_state.pdf_name != uploaded_pdf.name or st.session_state.knowledge_base is None:
+            with st.spinner("Indexando lectura con IA..."):
+                try:
+                    pdf_reader = PdfReader(uploaded_pdf)
+                    full_text = ""
+                    for page in pdf_reader.pages:
+                        extracted = page.extract_text()
+                        if extracted:
+                            full_text += extracted
+
+                    text_splitter = CharacterTextSplitter(
+                        separator="\n",
+                        chunk_size=600,
+                        chunk_overlap=50,
+                        length_function=len
+                    )
+                    chunks = text_splitter.split_text(full_text)
+                    embeddings = OpenAIEmbeddings()
+                    st.session_state.knowledge_base = FAISS.from_texts(chunks, embeddings)
+                    st.session_state.pdf_name = uploaded_pdf.name
+                    st.success("¡PDF procesado y listo para consultas!")
+                except Exception as e:
+                    st.error("Error al procesar el archivo PDF.")
+
+    st.markdown("---")
+    st.subheader("💬 Chat de Consulta")
+
+    for msg in st.session_state.chat_messages:
+        avatar_icon = "👤" if msg["role"] == "user" else "🤖"
+        with st.chat_message(msg["role"], avatar=avatar_icon):
+            st.markdown(msg["content"])
+
+    if prompt := st.chat_input("Escribe tu pregunta sobre la lectura..."):
+        st.session_state.chat_messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user", avatar="👤"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant", avatar="🤖"):
+            if not api_key:
+                fallback = "⚠️ Por favor ingresa tu OpenAI API Key en la caja superior de la pantalla para poder responder."
+                st.warning(fallback)
+                st.session_state.chat_messages.append({"role": "assistant", "content": fallback})
+            elif not uploaded_pdf:
+                fallback = "⚠️ Por favor sube un archivo PDF arriba para poder analizarlo."
+                st.info(fallback)
+                st.session_state.chat_messages.append({"role": "assistant", "content": fallback})
+            elif st.session_state.knowledge_base and HAS_RAG:
+                with st.spinner("Consultando al asistente..."):
+                    docs = st.session_state.knowledge_base.similarity_search(prompt, k=4)
+                    context = "\n\n".join([d.page_content for d in docs])
+                    llm = ChatOpenAI(temperature=0.2, model_name="gpt-4o-mini")
+                    messages = [
+                        ("system", "Eres Fluenty, un tutor de inglés y asistente académico. Responde en español explicando los fragmentos del texto en inglés de forma clara."),
+                        ("user", f"Contexto de la lectura:\n{context}\n\nPregunta: {prompt}")
+                    ]
+                    ans = llm.invoke(messages).content
+                    st.markdown(ans)
+                    st.session_state.chat_messages.append({"role": "assistant", "content": ans})
+
+# ==========================================
+# TAB 2: PRONUNCIACIÓN (VOZ REAL + WHISPER AI + MQTT)
+# ==========================================
+else:
+    st.markdown(f"""
+    <div class="app-card card-green">
+        <h3 style="margin-bottom: 6px;">📖 Lectura a Practicar</h3>
+        <p style="font-size: 1.15rem; font-weight: 600; line-height: 1.4; color: #1A1A1A; margin: 0;">
+            "{st.session_state.target_phrase}"
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    edited_phrase = st.text_input("Editar frase de práctica:", value=st.session_state.target_phrase)
+    if edited_phrase != st.session_state.target_phrase:
+        st.session_state.target_phrase = edited_phrase
+        st.rerun()
+
+    st.markdown("<h3 style='margin-top: 15px;'>🎙️ Captura de Voz</h3>", unsafe_allow_html=True)
+
+    audio_file = st.audio_input("Presiona para grabar tu voz", key="mic_recorder")
+
+    captured_text = None
+
+    if audio_file:
+        st.audio(audio_file)
+        if api_key and HAS_OPENAI:
+            with st.spinner("Analizando tu pronunciación con Whisper AI..."):
+                try:
+                    client_ai = OpenAI(api_key=api_key)
+                    transcript = client_ai.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_file,
+                        language="en"
+                    )
+                    captured_text = transcript.text.strip()
+                    st.info(f"🗣️ **Lo que la IA escuchó:** *\"{captured_text}\"*")
+                except Exception as e:
+                    st.error(f"Error procesando el audio: {e}")
+        else:
+            st.warning("⚠️ Ingresa tu OpenAI API Key en el campo superior para transcribir la voz.")
+
+    manual_input = st.text_input("O ingresa una prueba de voz simulada:", placeholder="Ej: Language shapes the way we think...")
+    if manual_input:
+        captured_text = manual_input
+
+    if captured_text:
+        target_words = st.session_state.target_phrase.lower().replace(".", "").replace(",", "").split()
+        spoken_words = captured_text.lower().replace(".", "").replace(",", "").split()
+
+        score = SequenceMatcher(None, target_words, spoken_words).ratio() * 100
+
+        if score >= 80:
+            send_mqtt_payload(captured_text, status_code="GREEN")
+            st.balloons()
+            st.markdown("""
+            <div class="app-card card-green">
+                <h3 style="color: #2E7D32;">¡Excelente Pronunciación! 🌟</h3>
+                <p style="margin:0;">Pronunciaste las palabras correctamente. Señal VERDE enviada a Wokwi.</p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            send_mqtt_payload(captured_text, status_code="RED")
+            st.markdown("""
+            <div class="app-card card-pink">
+                <h3 style="color: #C7859B;">Detalles por Corregir 💡</h3>
+                <p style="margin:0;">Revisa las palabras marcadas en rojo para mejorar tu fluidez. Señal ROJA enviada a Wokwi.</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.write("**Desglose de Términos:**")
+        badges_html = ""
+        for word in target_words:
+            if word in spoken_words:
+                badges_html += f'<span class="word-correct">✓ {word}</span> '
+            else:
+                badges_html += f'<span class="word-error">✗ {word}</span> '
+
+        st.markdown(badges_html, unsafe_allow_html=True)
+        st.metric("Puntaje de Fluidez", f"{score:.1f}%")
