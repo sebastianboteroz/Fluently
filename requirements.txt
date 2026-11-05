@@ -10,3 +10,4 @@ langchain-openai
 openai
 faiss-cpu
 Pillow
+ESP32Servo
